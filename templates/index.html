@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全国城市空气质量分析 (2023)</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="/static/js/china.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f2f5;
+        }
+
+        .header {
+            background-color: #001529;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            height: 400px;
+        }
+
+        h2 {
+            margin-top: 0;
+            font-size: 18px;
+            color: #333;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+
+        .chart {
+            width: 100%;
+            height: 350px;
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h1>2023年全国主要城市空气质量分析</h1>
+        <p style="font-size: 14px; opacity: 0.8;">
+            数据来源：天气后报 (真实爬取数据) |
+            当前入库数据量：<span id="dataCount" style="font-weight: bold; color: #40a9ff; font-size: 18px;">加载中...</span> 条
+        </p>
+    </div>
+
+    <div class="container">
+        <div class="card full-width" style="height: 600px;">
+            <h2>全国空气质量分布 (年均AQI)</h2>
+            <div id="mapChart" class="chart" style="height: 550px;"></div>
+        </div>
+        <div class="card">
+            <h2>北京全年AQI走势</h2>
+            <div id="trendChart" class="chart"></div>
+        </div>
+        <div class="card">
+            <h2>污染最严重的10个城市 (年均AQI)</h2>
+            <div id="barChart" class="chart"></div>
+        </div>
+        <div class="card">
+            <h2>主要污染物占比</h2>
+            <div id="pieChart" class="chart"></div>
+        </div>
+    </div>
+
+    <script>
+        const mapChart = echarts.init(document.getElementById('mapChart'));
+        const trendChart = echarts.init(document.getElementById('trendChart'));
+        const barChart = echarts.init(document.getElementById('barChart'));
+        const pieChart = echarts.init(document.getElementById('pieChart'));
+
+        fetch('/api/stats')
+            .then(response => response.json())
+            .then(data => {
+                // 1. Map Chart
+                try {
+                    mapChart.setOption({
+                        tooltip: {
+                            trigger: 'item',
+                            formatter: function (params) {
+                                return params.name + ' : ' + params.value[2];
+                            }
+                        },
+                        geo: {
+                            map: 'china',
+                            roam: true,
+                            label: {
+                                emphasis: {
+                                    show: false
+                                }
+                            },
+                            itemStyle: {
+                                normal: {
+                                    areaColor: '#323c48',
+                                    borderColor: '#111'
+                                },
+                                emphasis: {
+                                    areaColor: '#2a333d'
+                                }
+                            }
+                        },
+                        visualMap: {
+                            min: 0,
+                            max: 150,
+                            left: 'left',
+                            top: 'bottom',
+                            text: ['高', '低'],
+                            calculable: true,
+                            inRange: {
+                                color: ['#50a3ba', '#eac736', '#d94e5d']
+                            },
+                            textStyle: {
+                                color: '#fff'
+                            }
+                        },
+                        series: [{
+                            name: 'AQI',
+                            type: 'effectScatter',
+                            coordinateSystem: 'geo',
+                            data: data.map_data,
+                            symbolSize: function (val) {
+                                return val[2] / 10;
+                            },
+                            showEffectOn: 'render',
+                            rippleEffect: {
+                                brushType: 'stroke'
+                            },
+                            hoverAnimation: true,
+                            label: {
+                                normal: {
+                                    formatter: '{b}',
+                                    position: 'right',
+                                    show: true
+                                }
+                            },
+                            itemStyle: {
+                                normal: {
+                                    color: '#f4e925',
+                                    shadowBlur: 10,
+                                    shadowColor: '#333'
+                                }
+                            },
+                            zlevel: 1
+                        }]
+                    });
+                } catch (e) {
+                    console.error("Map Chart Error:", e);
+                }
+
+                // 2. Trend Chart
+                try {
+                    trendChart.setOption({
+                        tooltip: { trigger: 'axis' },
+                        xAxis: { type: 'category', data: data.trend_data.dates },
+                        yAxis: { type: 'value' },
+                        series: [{
+                            data: data.trend_data.aqi,
+                            type: 'line',
+                            smooth: true,
+                            areaStyle: {},
+                            itemStyle: { color: '#1890ff' }
+                        }]
+                    });
+                } catch (e) {
+                    console.error("Trend Chart Error:", e);
+                }
+
+                // 3. Bar Chart
+                try {
+                    barChart.setOption({
+                        tooltip: { trigger: 'axis' },
+                        xAxis: { type: 'category', data: data.bar_data.cities },
+                        yAxis: { type: 'value' },
+                        series: [{
+                            data: data.bar_data.values,
+                            type: 'bar',
+                            itemStyle: {
+                                color: function (params) {
+                                    return params.value > 100 ? '#d94e5d' : '#eac736';
+                                }
+                            }
+                        }]
+                    });
+                } catch (e) {
+                    console.error("Bar Chart Error:", e);
+                }
+
+                // 4. Pie Chart
+                try {
+                    pieChart.setOption({
+                        tooltip: { trigger: 'item' },
+                        legend: { orient: 'vertical', left: 'left' },
+                        series: [{
+                            type: 'pie',
+                            radius: '50%',
+                            data: data.comp_data,
+                            emphasis: {
+                                itemStyle: {
+                                    shadowBlur: 10,
+                                    shadowOffsetX: 0,
+                                    shadowColor: 'rgba(0, 0, 0, 0.5)'
+                                }
+                            }
+                        }]
+                    });
+                } catch (e) {
+                    console.error("Pie Chart Error:", e);
+                }
+
+                // 5. Update Total Count
+                document.getElementById('dataCount').innerText = data.total_count.toLocaleString();
+            })
+            .catch(err => console.error("Fetch Error:", err));
+
+        window.addEventListener('resize', function () {
+            mapChart.resize();
+            trendChart.resize();
+            barChart.resize();
+            pieChart.resize();
+        });
+    </script>
+</body>
+
+</html>
